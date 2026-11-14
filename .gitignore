@@ -1,0 +1,29 @@
+# Datasets & Data Tables (NEVER push large datasets)
+*.csv
+*.parquet
+*.tsv
+*.jsonl
+*.zip
+*.tar.gz
+*.rar
+
+# Environment variables & Secrets
+.env
+*.env
+!*.env.example
+
+# Python Cache & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+ENV/
+
+# System and IDE files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
