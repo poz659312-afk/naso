@@ -50,8 +50,8 @@ python -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 
 Queries the deployed Neon database to retrieve the target planet's features, then compares against the 6.38M-row Earth table.
 
-### Decimal & Frontend Flexibility
-- **Decimal Coordinates**: Automatically rounded/snapped to the nearest valid integer grid numbers on the target body.
+### Spatial Nearest Neighbor Matching & Frontend Flexibility
+- **Database Nearest Neighbor**: Instead of rounding coordinates with Python `round()`, the backend queries the database directly (`ORDER BY SQRT(POWER(lat - %s, 2) + POWER(lon - %s, 2)) LIMIT 1`) to find the nearest actual spatial record in the database and returns the offset distance in degrees (`distance_to_matched_point_deg`).
 - **Flexible Keys**: Accepts `planet` or `plants`.
 - **Flexible Location Formats**: Accepts `latitude`/`longitude`, `lat`/`lon`, or nested `location` objects/arrays.
 
@@ -59,8 +59,8 @@ Queries the deployed Neon database to retrieve the target planet's features, the
 ```json
 {
   "planet": "mars",
-  "latitude": 18.3847,
-  "longitude": 77.5819,
+  "latitude": 18.384729,
+  "longitude": 77.581932,
   "top_k": 5
 }
 ```
@@ -73,15 +73,20 @@ Queries the deployed Neon database to retrieve the target planet's features, the
     "planet": "Mars",
     "database_backend": "Neon PostgreSQL (Deployed)",
     "input_coordinates": {
-      "latitude": 18.3847,
-      "longitude": 77.5819
+      "latitude": 18.384729,
+      "longitude": 77.581932
     },
+    "matched_database_coordinates": {
+      "latitude": 18.0,
+      "longitude": 78.0
+    },
+    "distance_to_matched_point_deg": 0.5682,
     "nearest_valid_coordinates": {
-      "latitude": 18,
-      "longitude": 78
+      "latitude": 18.0,
+      "longitude": 78.0
     },
-    "was_decimal": true,
-    "adjustment_note": "Input decimal coordinates (18.3847, 77.5819) were converted to nearest valid planetary grid coordinate (18, 78).",
+    "search_method": "database_nearest_spatial_neighbor",
+    "note": "Queried database for nearest spatial location to (18.384729, 77.581932); matched (18.0, 78.0) at distance 0.5682°.",
     "features": {
       "elevation_m": -2341.0,
       "slope_deg": 2.135,

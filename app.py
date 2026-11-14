@@ -1,8 +1,8 @@
 """
 FastAPI Application for Planetary Analog Similarity Matching
 Endpoints to find Earth analogs for Mars and Moon locations.
-Supports decimal coordinate inputs from frontend and automatically snaps them
-to the nearest valid planetary dataset grid coordinates.
+Supports coordinate inputs from frontend (including any decimals) and retrieves
+the nearest spatial location directly from the planetary database.
 """
 
 from fastapi import FastAPI, HTTPException, Query, status
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, root_validator
 from typing import List, Optional, Dict, Any, Union
 import math
 
-from planetary_analog_model import PlanetaryAnalogModel, FAMOUS_SITES, snap_to_nearest_valid_coord
+from planetary_analog_model import PlanetaryAnalogModel, FAMOUS_SITES
 
 app = FastAPI(
     title="Planetary Analog API",
@@ -114,9 +114,11 @@ class TargetLocationInfo(BaseModel):
     planet: str
     database_backend: str
     input_coordinates: Dict[str, float]
-    nearest_valid_coordinates: Dict[str, int]
-    was_decimal: bool
-    adjustment_note: str
+    matched_database_coordinates: Dict[str, float]
+    distance_to_matched_point_deg: float
+    nearest_valid_coordinates: Dict[str, float]  # Kept for frontend backwards compatibility
+    search_method: str = "database_nearest_spatial_neighbor"
+    note: str
     features: Dict[str, Any]
 
 class AnalogResponse(BaseModel):
@@ -136,15 +138,14 @@ def format_analogs_response(raw_result: Dict[str, Any], top_k: int) -> AnalogRes
     
     in_lat = float(target_in['lat'])
     in_lon = float(target_in['lon'])
-    valid_lat = int(target_pt['lat'])
-    valid_lon = int(target_pt['lon'])
+    matched_lat = float(target_pt['lat'])
+    matched_lon = float(target_pt['lon'])
+    dist_deg = round(float(target_pt.get('distance_to_input_deg', 0.0)), 4)
     
-    # Check if input was decimal or differed from valid grid integer
-    is_decimal = (not in_lat.is_integer()) or (not in_lon.is_integer()) or (in_lat != valid_lat) or (in_lon != valid_lon)
-    if is_decimal:
-        note = f"Input decimal coordinates ({in_lat:.4f}, {in_lon:.4f}) were converted to nearest valid planetary grid coordinate ({valid_lat}, {valid_lon})."
+    if dist_deg > 0:
+        note = f"Queried database for nearest spatial location to ({in_lat}, {in_lon}); matched ({matched_lat}, {matched_lon}) at distance {dist_deg}°."
     else:
-        note = f"Input coordinates match exact planetary grid coordinate ({valid_lat}, {valid_lon})."
+        note = f"Input coordinates match exact database point ({matched_lat}, {matched_lon})."
     
     # Clean features summary for JSON response
     features_dict = {}
@@ -188,9 +189,11 @@ def format_analogs_response(raw_result: Dict[str, Any], top_k: int) -> AnalogRes
             planet=raw_result['body'],
             database_backend=raw_result.get('database', 'Neon PostgreSQL (Deployed)'),
             input_coordinates={'latitude': in_lat, 'longitude': in_lon},
-            nearest_valid_coordinates={'latitude': valid_lat, 'longitude': valid_lon},
-            was_decimal=is_decimal,
-            adjustment_note=note,
+            matched_database_coordinates={'latitude': matched_lat, 'longitude': matched_lon},
+            distance_to_matched_point_deg=dist_deg,
+            nearest_valid_coordinates={'latitude': matched_lat, 'longitude': matched_lon},
+            search_method="database_nearest_spatial_neighbor",
+            note=note,
             features=features_dict
         ),
         analogs_count=len(analog_items),
@@ -216,9 +219,9 @@ def root():
         },
         "documentation": "/docs",
         "description": "Send coordinates on Mars or Moon to get the top 5 most similar analog areas on Earth.",
-        "decimal_handling": "Decimal coordinates from frontend are automatically snapped to the nearest valid integer grid coordinates in the planetary dataset.",
+        "location_matching": "Coordinates from frontend are matched to the nearest spatial neighbor directly in the database (no Python round applied).",
         "endpoints": {
-            "POST /api/analogs": "Find top Earth analogs using JSON body (supports {latitude, longitude}, {lat, lon}, {location: ...}, and decimal inputs)",
+            "POST /api/analogs": "Find top Earth analogs using JSON body (supports {latitude, longitude}, {lat, lon}, {location: ...}, and any decimal inputs)",
             "GET /api/analogs": "Find top Earth analogs using query parameters",
             "GET /api/landmarks": "List famous Mars & Moon landmark sites",
             "GET /api/landmarks/{planet}/{landmark_name}": "Find Earth analogs for a landmark site"
@@ -237,7 +240,7 @@ def find_analogs_post(request: AnalogRequest):
     - **location**: Alternative nested object `{"lat": 18.38, "lon": 77.58}` or `[18.38, 77.58]`
     - **top_k**: Number of analogs (default: 5)
     
-    *Decimal Handling*: Decimal coordinates are automatically rounded/snapped to the nearest valid integer grid point on the target body.
+    *Nearest Spatial Matching*: Coordinates from frontend are matched directly against the nearest database records via spatial minimum distance.
     """
     body = request.planet
     try:
@@ -261,7 +264,7 @@ def find_analogs_get(
 ):
     """
     GET variant to test analog searches in a web browser or curl.
-    Decimal inputs are automatically converted to the nearest valid integer coordinates.
+    Coordinates are matched directly against the nearest database spatial record.
     """
     return find_analogs_post(AnalogRequest(planet=planet, latitude=latitude, longitude=longitude, top_k=top_k))
 

@@ -65,27 +65,6 @@ FAMOUS_SITES = {
     }
 }
 
-def snap_to_nearest_valid_coord(body: str, lat: float, lon: float) -> tuple:
-    """
-    Converts frontend decimal coordinates to the nearest valid integer grid numbers.
-    """
-    near_lat = int(round(float(lat)))
-    near_lon = int(round(float(lon)))
-    
-    # Handle longitude boundary / wrapping (-180 to 179)
-    if near_lon >= 180:
-        near_lon = -180 if near_lon == 180 else ((near_lon + 180) % 360) - 180
-    elif near_lon < -180:
-        near_lon = ((near_lon - 180) % 360) + 180
-        
-    if body.lower() == 'mars':
-        near_lat = max(-89, min(90, near_lat))
-    else:
-        near_lat = max(-90, min(90, near_lat))
-        
-    return near_lat, near_lon
-
-
 def identify_earth_region(lat, lon):
     """Identifies the approximate geographic region / country for Earth coordinates."""
     if -30 <= lat <= -18 and -72 <= lon <= -66:
@@ -150,37 +129,60 @@ class PlanetaryAnalogModel:
         return self._pg_conn
 
     def get_target_features(self, body, lat, lon):
-        """Looks up nearest valid grid point in Neon Postgres (or local fallback)."""
+        """
+        Finds the nearest spatial location directly in the database (Neon PostgreSQL or DuckDB).
+        No rounding or coordinate snapping is applied.
+        """
         body = body.lower()
         if body not in ('mars', 'moon'):
             raise ValueError(f"Unknown body: {body}. Choose 'mars' or 'moon'.")
             
-        valid_lat, valid_lon = snap_to_nearest_valid_coord(body, lat, lon)
         table_name = "mars" if body == "mars" else "moon"
+
+        # Validate and clamp coordinates to physical planetary domain
+        clean_lat = float(lat)
+        clean_lon = float(lon)
+        
+        # Longitude wrapping if outside [-180, 180]
+        if clean_lon > 180.0 or clean_lon < -180.0:
+            clean_lon = ((clean_lon + 180.0) % 360.0) - 180.0
+        # If clean_lon is 180.0, map to -180.0 (same meridian) since datasets range [-180, 179]
+        if clean_lon == 180.0:
+            clean_lon = -180.0
+            
+        clean_lat = max(-90.0, min(90.0, clean_lat))
+        if body == 'mars':
+            clean_lat = max(-89.0, min(90.0, clean_lat))
 
         if self.backend == "neon":
             conn = self._get_pg_conn()
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute(f"SELECT * FROM {table_name} WHERE lat = %s AND lon = %s LIMIT 1;", (valid_lat, valid_lon))
+                cur.execute(f"""
+                    SELECT *,
+                           SQRT(POWER(lat - %s, 2) + POWER(lon - %s, 2)) AS coord_dist_deg
+                    FROM {table_name}
+                    ORDER BY coord_dist_deg ASC
+                    LIMIT 1;
+                """, (clean_lat, clean_lon))
                 row = cur.fetchone()
                 if not row:
-                    # Fallback distance search if exact integer missing
-                    cur.execute(f"""
-                        SELECT * FROM {table_name}
-                        ORDER BY power(lat - %s, 2) + power(lon - %s, 2)
-                        LIMIT 1;
-                    """, (lat, lon))
-                    row = cur.fetchone()
+                    raise ValueError(f"No records found in {table_name} table.")
                 return dict(row)
         else:
             # Local DuckDB fallback
             import duckdb
             con = duckdb.connect()
             data_file = f"{table_name.capitalize()}Complete_Dataset.csv"
-            query = f"SELECT * FROM '{data_file}' WHERE lat = {valid_lat} AND lon = {valid_lon} LIMIT 1"
+            query = f"""
+                SELECT *,
+                       SQRT(POWER(lat - ({clean_lat}), 2) + POWER(lon - ({clean_lon}), 2)) AS coord_dist_deg
+                FROM '{data_file}'
+                ORDER BY coord_dist_deg ASC
+                LIMIT 1;
+            """
             df = con.execute(query).df()
             if df.empty:
-                df = con.execute(f"SELECT * FROM '{data_file}' ORDER BY power(lat - ({lat}), 2) + power(lon - ({lon}), 2) LIMIT 1").df()
+                raise ValueError(f"No records found in local dataset {data_file}.")
             return df.to_dict('records')[0]
 
     def find_analogs(self, body, lat, lon, top_k=5, weights=None, min_distance_deg=0.2):
@@ -288,11 +290,17 @@ class PlanetaryAnalogModel:
         results_df = pd.DataFrame(selected_rows)
         results_df['region'] = [identify_earth_region(r['lat'], r['lon']) for _, r in results_df.iterrows()]
         
+        coord_dist = round(float(target_row.get('coord_dist_deg', 0.0)), 4)
+        
         return {
             'body': body.capitalize(),
             'database': "Neon PostgreSQL (Deployed)",
             'target_input': {'lat': lat, 'lon': lon},
-            'target_matched_point': {'lat': target_row['lat'], 'lon': target_row['lon']},
+            'target_matched_point': {
+                'lat': target_row['lat'],
+                'lon': target_row['lon'],
+                'distance_to_input_deg': coord_dist
+            },
             'features_used': features_used,
             'analogs': results_df
         }

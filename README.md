@@ -12,12 +12,11 @@ Frontend / Client Request
        ▼
  FastAPI Service (app.py)
        │
-       ├─► 1. Snaps decimal input to nearest valid planetary coordinate
+       ├─► 1. Queries deployed Neon PostgreSQL ('mars' / 'moon' table)
+       │      to find the nearest spatial location directly in the database
+       │      and extract topography, albedo, thermal & dust opacity features
        │
-       ├─► 2. Queries deployed Neon PostgreSQL ('mars' / 'moon' table)
-       │      to extract topography, albedo, thermal & dust opacity features
-       │
-       └─► 3. Evaluates standardized Euclidean distance across 6.38M points
+       └─► 2. Evaluates standardized Euclidean distance across 268k points
               in the deployed Neon PostgreSQL ('earth' table)
        │
        ▼
