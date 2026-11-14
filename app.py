@@ -211,7 +211,8 @@ def root():
         "deployed_tables": {
             "moon": "65,160 rows",
             "mars": "64,800 rows",
-            "earth": "6,381,087 rows"
+            "earth": "268,252 rows (0.25° grid, high-speed matching)",
+            "earth_backup": "6,381,087 rows (original 0.05° grid preserved)"
         },
         "documentation": "/docs",
         "description": "Send coordinates on Mars or Moon to get the top 5 most similar analog areas on Earth.",

@@ -28,7 +28,8 @@ Frontend / Client Request
 - **Tables**:
   - `mars` (64,800 rows)
   - `moon` (65,160 rows)
-  - `earth` (6,381,087 rows)
+  - `earth` (268,252 rows - 0.25° grid, ~0.25s matching speed)
+  - `earth_backup` (6,381,087 rows - original 0.05° archive preserved)
 
 ---
 

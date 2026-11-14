@@ -13,7 +13,8 @@ A FastAPI service that matches any location on **Mars** or the **Moon** to its *
 - **Tables**:
   1. `mars` (64,800 rows) — Complete physical, topographic, thermal, and atmospheric dataset.
   2. `moon` (65,160 rows) — Topographic, thermal, and optical albedo dataset.
-  3. `earth` (6,381,087 rows) — Global Earth satellite observations (SRTM elevation/slope/roughness, MODIS albedo/temperatures, MERRA-2 dust opacity/pressure).
+  3. `earth` (268,252 rows) — 0.25° spatial resolution Earth observations (~25 km grid, ~0.25s query speed).
+  4. `earth_backup` (6,381,087 rows) — Original 0.05° high-density Earth observation archive preserved.
 
 > [!NOTE]
 > Connection credentials are automatically read from the [.env](file:///c:/Users/Mohamed%20Alaa/Downloads/naso/.env) file (`DATABASE_URL`). Connection strings and passwords are never printed or committed.
