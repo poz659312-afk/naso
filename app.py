@@ -305,5 +305,15 @@ def find_analogs_by_landmark(
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    
+    port_env = os.environ.get("PORT", "8000")
+    try:
+        port = int(port_env)
+    except ValueError:
+        port = 8000
+        
+    host = os.environ.get("HOST", "0.0.0.0")
+    print(f"Starting Planetary Analog API on {host}:{port}...")
+    uvicorn.run("app:app", host=host, port=port)
